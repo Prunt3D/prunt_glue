@@ -1,0 +1,23 @@
+name = "prunt_glue"
+description = "Glue library to combine other Prunt libraries."
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampll.com>"]
+maintainers-logins = ["liampwll"]
+
+[[depends-on]]
+prunt_physical_types = "*"
+prunt_motion_planner = "*"
+prunt_stepgen = "*"
+prunt_config = "*"
+prunt_gui = "*"
+[[pins]]
+prunt_physical_types = { path = "../prunt_physical_types" }
+prunt_motion_planner = { path = "../prunt_motion_planner" }
+prunt_stepgen = { path = "../prunt_stepgen" }
+prunt_config = { path = "../prunt_config" }
+prunt_gui = { path = "../prunt_gui" }
+
+[build-switches]
+release.optimization = []
