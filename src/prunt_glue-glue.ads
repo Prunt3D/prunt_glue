@@ -41,8 +41,6 @@ generic
    --  'Image of each value of this type will be shown in the GUI. The names should correspond to names on the board.
    with function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
 
-   Planner_CPU : System.Multiprocessors.CPU_Range;
-   --  CPU for motion planner task. This task does not require an isolated CPU.
    Stepgen_Preprocessor_CPU : System.Multiprocessors.CPU_Range;
    --  CPU for step generator preprocessor task. This task requires an isolated CPU where it is the only task.
    Stepgen_Pulse_Generator_CPU : System.Multiprocessors.CPU_Range;
@@ -74,9 +72,19 @@ package Prunt_Glue.Glue is
 
 private
 
+   procedure Helper_Lock_Memory with
+     Import => True, Convention => C, External_Name => "prunt_glue_helper_lock_memory";
+
+   type Flush_Extra_Data is record
+      Is_Homing_Move : Boolean;
+      Home_Switch    : Input_Switch_Name;
+      Hit_On_State   : Pin_State;
+   end record;
+
    package My_Planner is new Motion_Planner.Planner
-     (Flush_Extra_Data_Type    => Boolean,
-      Flush_Extra_Data_Default => False,
+     (Flush_Extra_Data_Type    => Flush_Extra_Data,
+      Flush_Extra_Data_Default =>
+        (Is_Homing_Move => False, Home_Switch => Input_Switch_Name'First, Hit_On_State => High_State),
       Initial_Position         => [others => 0.0 * mm],
       Max_Corners              => Max_Planner_Block_Corners,
       Input_Queue_Length       => Planner_Input_Queue_Length,
@@ -90,24 +98,47 @@ private
       Input_Switch_Name => Input_Switch_Name,
       Config_Path       => Config_Path);
 
-   package My_GUI is new GUI.GUI (My_Config => My_Config);
+   function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
+   function Is_Home_Switch_Hit (Data : Flush_Extra_Data) return Boolean;
 
-   --  package My_Stepgen is new Stepgen.Stepgen
-   --    (Low_Level_To_Time            => Low_Level_Time_Type,
-   --     Time_To_Low_Level            => Time_To_Low_Level,
-   --     Low_Level_To_Time            => Low_Level_To_Time,
-   --     Get_Time                     => Get_Time,
-   --     Planner                      => My_Planner,
-   --     Is_Homing_Move               => X,
-   --     Is_Home_Switch_Hit           => X,
-   --     Stepper_Name                 => Stepper_Name,
-   --     Stepper_Position             => X,
-   --     Position_To_Stepper_Position => X,
-   --     Stepper_Position_To_Position => X,
-   --     Do_Step                      => X,
-   --     Set_Direction                => X,
-   --     Finished_Block               => X,
-   --     Interpolation_Time           => Interpolation_Time,
-   --     Initial_Position             => [others => 0.0 * mm]);
+   type Stepper_Position is array (Stepper_Name) of Stepgen.Step_Count;
+
+   type Stepper_Pos_Data is array (Axis_Name, Stepper_Name) of Length;
+
+   function Position_To_Stepper_Position (Pos : Position; Data : Stepper_Pos_Data) return Stepper_Position;
+   function Stepper_Position_To_Position (Pos : Stepper_Position; Data : Stepper_Pos_Data) return Position;
+
+   type Stepper_Output_Data is record
+      Current_Step_State : Pin_State;
+   end record;
+
+   procedure Do_Step (Stepper : Stepper_Name; Data : in out Stepper_Output_Data);
+   procedure Set_Direction (Stepper : Stepper_Name; Dir : Stepgen.Direction; Data : in out Stepper_Output_Data);
+
+   procedure Finished_Block (Data : Flush_Extra_Data);
+
+   package My_Stepgen is new Stepgen.Stepgen
+     (Low_Level_Time_Type          => Low_Level_Time_Type,
+      Time_To_Low_Level            => Time_To_Low_Level,
+      Low_Level_To_Time            => Low_Level_To_Time,
+      Get_Time                     => Get_Time,
+      Planner                      => My_Planner,
+      Is_Homing_Move               => Is_Homing_Move,
+      Is_Home_Switch_Hit           => Is_Home_Switch_Hit,
+      Stepper_Name                 => Stepper_Name,
+      Stepper_Position             => Stepper_Position,
+      Stepper_Pos_Data             => Stepper_Pos_Data,
+      Position_To_Stepper_Position => Position_To_Stepper_Position,
+      Stepper_Position_To_Position => Stepper_Position_To_Position,
+      Stepper_Output_Data          => Stepper_Output_Data,
+      Do_Step                      => Do_Step,
+      Set_Direction                => Set_Direction,
+      Finished_Block               => Finished_Block,
+      Interpolation_Time           => Interpolation_Time,
+      Initial_Position             => [others => 0.0 * mm],
+      Preprocessor_CPU             => Stepgen_Preprocessor_CPU,
+      Runner_CPU                   => Stepgen_Pulse_Generator_CPU);
+
+   package My_GUI is new GUI.GUI (My_Config => My_Config);
 
 end Prunt_Glue.Glue;
