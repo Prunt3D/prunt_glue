@@ -6,6 +6,7 @@ with Stepgen.Stepgen;
 with Motion_Planner.Planner;
 with GUI.GUI;
 with Ada.Containers;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
 generic
    type Low_Level_Time_Type is mod <>;
@@ -103,7 +104,7 @@ private
 
    type Stepper_Position is array (Stepper_Name) of Stepgen.Step_Count;
 
-   type Stepper_Pos_Data is array (Axis_Name, Stepper_Name) of Length;
+   type Stepper_Pos_Data is array (Axis_Name, Stepper_Name) of Physical_Types.Length;
 
    function Position_To_Stepper_Position (Pos : Position; Data : Stepper_Pos_Data) return Stepper_Position;
    function Stepper_Position_To_Position (Pos : Stepper_Position; Data : Stepper_Pos_Data) return Position;
@@ -116,6 +117,10 @@ private
    procedure Set_Direction (Stepper : Stepper_Name; Dir : Stepgen.Direction; Data : in out Stepper_Output_Data);
 
    procedure Finished_Block (Data : Flush_Extra_Data);
+
+   function Get_Status_Message return String;
+
+   function Get_Position return Position;
 
    package My_Stepgen is new Stepgen.Stepgen
      (Low_Level_Time_Type          => Low_Level_Time_Type,
@@ -139,6 +144,14 @@ private
       Preprocessor_CPU             => Stepgen_Preprocessor_CPU,
       Runner_CPU                   => Stepgen_Pulse_Generator_CPU);
 
-   package My_GUI is new GUI.GUI (My_Config => My_Config);
+   package My_GUI is new GUI.GUI
+     (My_Config => My_Config, Get_Status_Message => Get_Status_Message, Get_Position => Get_Position);
+
+   protected Status_Message is
+      procedure Set (S : String);
+      function Get return String;
+   private
+      Local : Unbounded_String := To_Unbounded_String ("");
+   end Status_Message;
 
 end Prunt_Glue.Glue;

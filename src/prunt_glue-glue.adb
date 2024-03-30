@@ -68,15 +68,26 @@ package body Prunt_Glue.Glue is
       null;
    end Finished_Block;
 
+   function Get_Status_Message return String is
+   begin
+      return Status_Message.Get;
+   end Get_Status_Message;
+
+   function Get_Position return Position is
+   begin
+      return My_Stepgen.Last_Position;
+   end Get_Position;
+
    Config_Constraint_Error : exception;
 
    procedure Run is
-      Prunt_Params  : My_Config.Prunt_Parameters;
-      Error_Message : String := "";
+      Prunt_Params : My_Config.Prunt_Parameters;
    begin
       My_Config.Config_File.Read (Prunt_Params);
 
-      if Prunt_Params.Enabled then
+      if not Prunt_Params.Enabled then
+         Status_Message.Set ("Prunt is disabled. Enable in config editor after setting other settings.");
+      else
          begin
             for S in Stepper_Name loop
                declare
@@ -103,7 +114,7 @@ package body Prunt_Glue.Glue is
             end;
 
             declare
-               Data             : Stepper_Pos_Data := [others => [others => Length'Last]];
+               Data             : Stepper_Pos_Data := [others => [others => Physical_Types.Length'Last]];
                Kinematic_Params : My_Config.Kinematics_Parameters;
 
                Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
@@ -205,12 +216,30 @@ package body Prunt_Glue.Glue is
 
          exception
             when E : Config_Constraint_Error =>
-               Error_Message := Ada.Exceptions.Exception_Information (E);
-            --  My_Config.Write ((My_Config.Prunt_Parameters'(My_Config.Read) with delta Enabled => False));
+               Status_Message.Set (Ada.Exceptions.Exception_Information (E));
+               declare
+                  Prunt_Params : My_Config.Prunt_Parameters;
+               begin
+                  My_Config.Config_File.Read (Prunt_Params);
+                  Prunt_Params.Enabled := False;
+                  My_Config.Config_File.Write (Prunt_Params);
+               end;
          end;
       end if;
 
-      My_GUI.Run (Config_Only => Prunt_Params.Enabled = False or Error_Message /= "", Error_Message => Error_Message);
+      My_GUI.Run;
    end Run;
+
+   protected body Status_Message is
+      procedure Set (S : String) is
+      begin
+         Set_Unbounded_String (Local, S);
+      end Set;
+
+      function Get return String is
+      begin
+         return To_String (Local);
+      end Get;
+   end Status_Message;
 
 end Prunt_Glue.Glue;
