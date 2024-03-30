@@ -12,12 +12,14 @@ prunt_motion_planner = "*"
 prunt_stepgen = "*"
 prunt_config = "*"
 prunt_gui = "*"
+prunt_gcode_parser = "*"
 [[pins]]
 prunt_physical_types = { path = "../prunt_physical_types" }
 prunt_motion_planner = { path = "../prunt_motion_planner" }
 prunt_stepgen = { path = "../prunt_stepgen" }
 prunt_config = { path = "../prunt_config" }
 prunt_gui = { path = "../prunt_gui" }
+prunt_gcode_parser = { path = "../prunt_gcode_parser" }
 
 [build-switches]
 release.optimization = []

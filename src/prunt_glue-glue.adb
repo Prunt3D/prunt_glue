@@ -1,6 +1,9 @@
 with Ada.Exceptions;
+with Prunt_Glue.Glue.Gcode_Handler;
 
 package body Prunt_Glue.Glue is
+
+   package My_Gcode_Handler is new Gcode_Handler;
 
    function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean is
    begin
@@ -63,9 +66,11 @@ package body Prunt_Glue.Glue is
       end case;
    end Set_Direction;
 
-   procedure Finished_Block (Data : Flush_Extra_Data) is
+   procedure Finished_Block
+     (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Physical_Types.Length; Hit_During_Accel : Boolean)
+   is
    begin
-      null;
+      My_Gcode_Handler.Finished_Block (Data, First_Segment_Accel_Distance, Hit_During_Accel);
    end Finished_Block;
 
    function Get_Status_Message return String is
@@ -77,6 +82,11 @@ package body Prunt_Glue.Glue is
    begin
       return My_Stepgen.Last_Position;
    end Get_Position;
+
+   procedure Submit_Gcode (Command : String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Handler.Try_Queue_Command (Command, Succeeded);
+   end Submit_Gcode;
 
    Config_Constraint_Error : exception;
 
@@ -110,7 +120,8 @@ package body Prunt_Glue.Glue is
                Kinematics_Params : My_Config.Kinematics_Parameters;
             begin
                My_Config.Config_File.Read (Kinematics_Params);
-               My_Planner.Runner.Setup (In_Scaler => Kinematics_Params.Planning_Scaler);
+               My_Planner.Runner.Setup
+                 (In_Scaler => Kinematics_Params.Planning_Scaler, In_Limits => Kinematics_Params.Max_Limits);
             end;
 
             declare
@@ -213,6 +224,8 @@ package body Prunt_Glue.Glue is
 
                My_Stepgen.Runner.Setup (Params);
             end;
+
+            My_Gcode_Handler.Runner.Start;
 
          exception
             when E : Config_Constraint_Error =>

@@ -1,5 +1,5 @@
 with Motion_Planner;
-with Physical_Types; use Physical_Types;
+with Physical_Types;        use Physical_Types;
 with System.Multiprocessors;
 with Config.Config;
 with Stepgen.Stepgen;
@@ -77,15 +77,14 @@ private
      Import => True, Convention => C, External_Name => "prunt_glue_helper_lock_memory";
 
    type Flush_Extra_Data is record
-      Is_Homing_Move : Boolean;
-      Home_Switch    : Input_Switch_Name;
-      Hit_On_State   : Pin_State;
+      Is_Homing_Move : Boolean           := False;
+      Home_Switch    : Input_Switch_Name := Input_Switch_Name'First;
+      Hit_On_State   : Pin_State         := High_State;
    end record;
 
    package My_Planner is new Motion_Planner.Planner
      (Flush_Extra_Data_Type    => Flush_Extra_Data,
-      Flush_Extra_Data_Default =>
-        (Is_Homing_Move => False, Home_Switch => Input_Switch_Name'First, Hit_On_State => High_State),
+      Flush_Extra_Data_Default => (others => <>),
       Initial_Position         => [others => 0.0 * mm],
       Max_Corners              => Max_Planner_Block_Corners,
       Input_Queue_Length       => Planner_Input_Queue_Length,
@@ -116,11 +115,14 @@ private
    procedure Do_Step (Stepper : Stepper_Name; Data : in out Stepper_Output_Data);
    procedure Set_Direction (Stepper : Stepper_Name; Dir : Stepgen.Direction; Data : in out Stepper_Output_Data);
 
-   procedure Finished_Block (Data : Flush_Extra_Data);
+   procedure Finished_Block
+     (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Physical_Types.Length; Hit_During_Accel : Boolean);
 
    function Get_Status_Message return String;
 
    function Get_Position return Position;
+
+   procedure Submit_Gcode (Command : String; Succeeded : out Boolean);
 
    package My_Stepgen is new Stepgen.Stepgen
      (Low_Level_Time_Type          => Low_Level_Time_Type,
@@ -145,7 +147,10 @@ private
       Runner_CPU                   => Stepgen_Pulse_Generator_CPU);
 
    package My_GUI is new GUI.GUI
-     (My_Config => My_Config, Get_Status_Message => Get_Status_Message, Get_Position => Get_Position);
+     (My_Config          => My_Config,
+      Get_Status_Message => Get_Status_Message,
+      Get_Position       => Get_Position,
+      Submit_Gcode       => Submit_Gcode);
 
    protected Status_Message is
       procedure Set (S : String);
