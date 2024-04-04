@@ -21,7 +21,6 @@ generic
    type Stepper_Name is (<>);
    --  'Image of each value of this type will be shown in the GUI. The names should correspond to names on the board.
    with procedure Set_Stepper_Pin_State (Stepper : Stepper_Name; Pin : Stepper_Output_Pins; State : Pin_State);
-   with procedure Toggle_Stepper_Pin_State (Stepper : Stepper_Name; Pin : Stepper_Output_Pins);
    with function Get_Stepper_Pin_State (Stepper : Stepper_Name; Pin : Stepper_Input_Pins) return Pin_State;
 
    type Heater_Name is (<>);
