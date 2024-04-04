@@ -177,6 +177,7 @@ package body Prunt_Glue.Glue.Gcode_Handler is
               ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
                 Flush_Extra_Data => (others => <>),
                 Reset_Pos        => Pos_After));
+            Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
          end;
       end Double_Tap_Home_Axis;
 
