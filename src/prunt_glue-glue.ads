@@ -72,6 +72,8 @@ package Prunt_Glue.Glue is
 
 private
 
+   Loop_Interpolation_Time_Multiplier : constant := 32;
+
    procedure Helper_Lock_Memory with
      Import => True, Convention => C, External_Name => "prunt_glue_helper_lock_memory";
 
@@ -81,13 +83,19 @@ private
       Hit_On_State   : Pin_State         := High_State;
    end record;
 
+   function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
+   function Is_Home_Switch_Hit (Data : Flush_Extra_Data) return Boolean;
+
    package My_Planner is new Motion_Planner.Planner
-     (Flush_Extra_Data_Type    => Flush_Extra_Data,
-      Flush_Extra_Data_Default => (others => <>),
-      Initial_Position         => [others => 0.0 * mm],
-      Max_Corners              => Max_Planner_Block_Corners,
-      Input_Queue_Length       => Planner_Input_Queue_Length,
-      Output_Queue_Length      => Planner_Output_Queue_Length);
+     (Flush_Extra_Data_Type        => Flush_Extra_Data,
+      Flush_Extra_Data_Default     => (others => <>),
+      Initial_Position             => [others => 0.0 * mm],
+      Max_Corners                  => Max_Planner_Block_Corners,
+      Input_Queue_Length           => Planner_Input_Queue_Length,
+      Output_Queue_Length          => Planner_Output_Queue_Length,
+      Is_Homing_Move               => Is_Homing_Move,
+      Home_Move_Minimum_Coast_Time =>
+        1.03 * Low_Level_To_Time (Interpolation_Time * (1 + Loop_Interpolation_Time_Multiplier)));
 
    package My_Config is new Config.Config
      (Stepper_Name      => Stepper_Name,
@@ -96,9 +104,6 @@ private
       Fan_Name          => Fan_Name,
       Input_Switch_Name => Input_Switch_Name,
       Config_Path       => Config_Path);
-
-   function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
-   function Is_Home_Switch_Hit (Data : Flush_Extra_Data) return Boolean;
 
    type Stepper_Position is array (Stepper_Name) of Stepgen.Step_Count;
 
@@ -141,6 +146,7 @@ private
       Set_Direction                => Set_Direction,
       Finished_Block               => Finished_Block,
       Interpolation_Time           => Interpolation_Time,
+      Loop_Interpolation_Time      => Interpolation_Time * Loop_Interpolation_Time_Multiplier,
       Initial_Position             => [others => 0.0 * mm],
       Preprocessor_CPU             => Stepgen_Preprocessor_CPU,
       Runner_CPU                   => Stepgen_Pulse_Generator_CPU);
