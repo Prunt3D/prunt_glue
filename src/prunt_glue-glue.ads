@@ -66,6 +66,14 @@ generic
    --  Maximum number of items in the planner input and output queues. Increasing these values uses more memory but
    --  provides a larger buffer that may increase throughput. There are no serious consequences to these queues
    --  running dry, the printer may just pause more often as it waits for new blocks.
+
+   with procedure Waiting_For_Time (T : Low_Level_Time_Type) is null;
+   --  When the step generator is waiting in a loop for a specific time, this procedure will be called. This procedure
+   --  is only intended for use with simulation. Do not use this procedure to do other things in the stepgen task.
+
+   Ignore_Empty_Queue : Boolean := False;
+   --  If set to True, the step generator will not raise an exception when the queue is empty and will not wait for
+   --  the queue to be filled before beginning execution. This is only meant for use in simulation.
 package Prunt_Glue.Glue is
 
    procedure Run;
@@ -149,7 +157,9 @@ private
       Loop_Interpolation_Time      => Interpolation_Time * Loop_Interpolation_Time_Multiplier,
       Initial_Position             => [others => 0.0 * mm],
       Preprocessor_CPU             => Stepgen_Preprocessor_CPU,
-      Runner_CPU                   => Stepgen_Pulse_Generator_CPU);
+      Runner_CPU                   => Stepgen_Pulse_Generator_CPU,
+      Waiting_For_Time             => Waiting_For_Time,
+      Ignore_Empty_Queue           => Ignore_Empty_Queue);
 
    package My_GUI is new GUI.GUI
      (My_Config          => My_Config,
