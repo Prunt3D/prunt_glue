@@ -83,10 +83,15 @@ package body Prunt_Glue.Glue is
       return My_Stepgen.Last_Position;
    end Get_Position;
 
-   procedure Submit_Gcode (Command : String; Succeeded : out Boolean) is
+   procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
    begin
       My_Gcode_Handler.Try_Queue_Command (Command, Succeeded);
-   end Submit_Gcode;
+   end Submit_Gcode_Command;
+
+   procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Handler.Try_Set_File (Path, Succeeded);
+   end Submit_Gcode_File;
 
    Config_Constraint_Error : exception;
 

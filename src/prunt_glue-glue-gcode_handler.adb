@@ -327,6 +327,8 @@ package body Prunt_Glue.Glue.Gcode_Handler is
                   end loop;
                end;
 
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+
                Close (File);
             exception
                --  TODO: Check what exceptions can actually come from file IO.

@@ -134,7 +134,8 @@ private
 
    function Get_Position return Position;
 
-   procedure Submit_Gcode (Command : String; Succeeded : out Boolean);
+   procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
+   procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    package My_Stepgen is new Stepgen.Stepgen
      (Low_Level_Time_Type          => Low_Level_Time_Type,
@@ -162,10 +163,11 @@ private
       Ignore_Empty_Queue           => Ignore_Empty_Queue);
 
    package My_GUI is new GUI.GUI
-     (My_Config          => My_Config,
-      Get_Status_Message => Get_Status_Message,
-      Get_Position       => Get_Position,
-      Submit_Gcode       => Submit_Gcode);
+     (My_Config            => My_Config,
+      Get_Status_Message   => Get_Status_Message,
+      Get_Position         => Get_Position,
+      Submit_Gcode_Command => Submit_Gcode_Command,
+      Submit_Gcode_File    => Submit_Gcode_File);
 
    protected Status_Message is
       procedure Set (S : String);
