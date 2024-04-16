@@ -117,6 +117,8 @@ package Prunt_Glue.Glue is
 
 private
 
+   Config_Constraint_Error : exception;
+
    Loop_Interpolation_Time_Multiplier : constant := 32;
 
    procedure Helper_Lock_Memory with

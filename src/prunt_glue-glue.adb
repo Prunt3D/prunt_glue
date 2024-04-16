@@ -115,8 +115,6 @@ package body Prunt_Glue.Glue is
       My_Gcode_Handler.Try_Set_File (Path, Succeeded);
    end Submit_Gcode_File;
 
-   Config_Constraint_Error : exception;
-
    procedure Run is
       Prunt_Params : My_Config.Prunt_Parameters;
    begin

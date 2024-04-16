@@ -260,6 +260,10 @@ package body Prunt_Glue.Glue.Gcode_Handler is
       accept Start do
          My_Config.Config_File.Read (Kinematics_Params);
 
+         for I in Input_Switch_Name loop
+            My_Config.Config_File.Read (Switchwise_Switch_Params (I), I);
+         end loop;
+
          for I in Axis_Name loop
             My_Config.Config_File.Read (Axial_Homing_Params (I), I);
             case Axial_Homing_Params (I).Kind is
@@ -268,37 +272,44 @@ package body Prunt_Glue.Glue.Gcode_Handler is
                     Axial_Homing_Params (I).Second_Move_Distance = 0.0 * mm or
                     Axial_Homing_Params (I).Back_Off_Move_Distance = 0.0 * mm
                   then
-                     null;
-                     --  TODO: Handle this.
+                     raise Config_Constraint_Error
+                       with "One or more homing distances on axis " & I'Image &
+                       " are set to 0. This would cause homing to never complete.";
                   end if;
 
-                  if Axial_Homing_Params (I).First_Move_Distance / Axial_Homing_Params (I).Second_Move_Distance < 0.0
+                  if Axial_Homing_Params (I).First_Move_Distance /
+                    Axial_Homing_Params (I).Second_Move_Distance <
+                    0.0
                   then
-                     null;
-                     --  TODO: Handle this.
+                     raise Config_Constraint_Error
+                       with "First and second homing distance on axis " & I'Image & " have different signs. " &
+                       "This would cause the axis to move away from the switch forever after the first hit.";
                   end if;
 
                   if Axial_Homing_Params (I).First_Move_Distance / Axial_Homing_Params (I).Back_Off_Move_Distance > 0.0
                   then
-                     null;
-                     --  TODO: Handle this.
+                     raise Config_Constraint_Error
+                       with "First homing distance and back-off distance on axis " & I'Image & " have same sign. " &
+                       "This would cause axis to move further in to the switch after hitting it.";
                   end if;
 
                   if abs Axial_Homing_Params (I).First_Move_Distance < abs Axial_Homing_Params (I).Second_Move_Distance
                   then
-                     null;
-                     --  TODO: Handle this (larger distance for second move is nonsensical as accuracy will be lower).
+                     raise Config_Constraint_Error
+                       with "First homing distance on axis " & I'Image & " is smaller than second homing distance. " &
+                       "The second distance should be smaller for more accurate homing.";
+                  end if;
+
+                  if not Switchwise_Switch_Params (Axial_Homing_Params (I).Switch).Enabled then
+                     raise Config_Constraint_Error
+                       with "Axis " & I'Image & " is configured to use switch " &
+                       Axial_Homing_Params (I).Switch'Image & " for homing but the switch is not enabled.";
                   end if;
                when My_Config.Set_To_Value_Kind =>
                   null;
             end case;
          end loop;
       end Start;
-
-      for I in Input_Switch_Name loop
-         My_Config.Config_File.Read (Switchwise_Switch_Params (I), I);
-         --  TODO: Check relevant switches are enabled.
-      end loop;
 
       loop
          delay 0.1;
