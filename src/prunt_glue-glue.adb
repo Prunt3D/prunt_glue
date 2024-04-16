@@ -19,8 +19,9 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Exceptions;
 with Prunt_Glue.Glue.Gcode_Handler;
+with Ada.Task_Termination;
+with Ada.Task_Identification;
 
 package body Prunt_Glue.Glue is
 
@@ -119,120 +120,12 @@ package body Prunt_Glue.Glue is
    procedure Run is
       Prunt_Params : My_Config.Prunt_Parameters;
    begin
-      My_Config.Config_File.Read (Prunt_Params);
+      begin
+         My_Config.Config_File.Read (Prunt_Params);
 
-      if not Prunt_Params.Enabled then
-         Status_Message.Set ("Prunt is disabled. Enable in config editor after setting other settings.");
-      else
-         begin
-            for S in Stepper_Name loop
-               declare
-                  Stepper_Params : My_Config.Stepper_Parameters;
-               begin
-                  My_Config.Config_File.Read (Stepper_Params, S);
-
-                  if Stepper_Params.Enabled then
-                     Set_Stepper_Pin_State (S, Step_Pin, Low_State);
-                     if Stepper_Params.Enabled_On_High then
-                        Set_Stepper_Pin_State (S, Enable_Pin, High_State);
-                     else
-                        Set_Stepper_Pin_State (S, Enable_Pin, Low_State);
-                     end if;
-                  end if;
-               end;
-            end loop;
-
-            declare
-               Kinematics_Params : My_Config.Kinematics_Parameters;
-            begin
-               My_Config.Config_File.Read (Kinematics_Params);
-               My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
-            end;
-
-            declare
-               Data             : Stepper_Pos_Data := [others => [others => Physical_Types.Length'Last]];
-               Kinematic_Params : My_Config.Kinematics_Parameters;
-
-               Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
-
-               procedure Check_Stepper (S : Stepper_Name) is
-                  Stepper_Params : My_Config.Stepper_Parameters;
-               begin
-                  My_Config.Config_File.Read (Stepper_Params, S);
-
-                  if not Stepper_Params.Enabled then
-                     raise Config_Constraint_Error with "Stepper " & S'Image & " attached to an axis but not enabled.";
-                  end if;
-
-                  if Used_Steppers (S) then
-                     raise Config_Constraint_Error with "Stepper " & S'Image & " attached to multiples axes.";
-                  end if;
-
-                  Used_Steppers (S) := True;
-               end Check_Stepper;
-            begin
-               My_Config.Config_File.Read (Kinematic_Params);
-
-               for S in Stepper_Name loop
-                  declare
-                     Stepper_Params : My_Config.Stepper_Parameters;
-                  begin
-                     My_Config.Config_File.Read (Stepper_Params, S);
-
-                     case Kinematic_Params.Kind is
-                        when My_Config.Cartesian_Kind =>
-                           if Kinematic_Params.X_Steppers (S) then
-                              Check_Stepper (S);
-                              Data (X_Axis, S) :=
-                                Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                           end if;
-
-                           if Kinematic_Params.Y_Steppers (S) then
-                              Check_Stepper (S);
-                              Data (Y_Axis, S) :=
-                                Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                           end if;
-                        when My_Config.Core_XY_Kind =>
-                           if Kinematic_Params.A_Steppers (S) then
-                              Check_Stepper (S);
-                              Data (X_Axis, S) :=
-                                0.5 * Stepper_Params.Mm_Per_Step *
-                                (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                              Data (Y_Axis, S) :=
-                                0.5 * Stepper_Params.Mm_Per_Step *
-                                (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                           end if;
-
-                           if Kinematic_Params.B_Steppers (S) then
-                              Check_Stepper (S);
-                              Data (X_Axis, S) :=
-                                0.5 * Stepper_Params.Mm_Per_Step *
-                                (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                              Data (Y_Axis, S) :=
-                                -0.5 * Stepper_Params.Mm_Per_Step *
-                                (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                           end if;
-                     end case;
-
-                     if Kinematic_Params.Z_Steppers (S) then
-                        Check_Stepper (S);
-                        Data (Z_Axis, S) :=
-                          Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                     end if;
-
-                     if Kinematic_Params.E_Steppers (S) then
-                        Check_Stepper (S);
-                        Data (E_Axis, S) :=
-                          Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
-                     end if;
-                  end;
-               end loop;
-
-               My_Stepgen.Preprocessor.Setup (Data);
-            end;
-
-            declare
-               Params : My_Stepgen.Stepper_Parameters_Array;
+         if not Prunt_Params.Enabled then
+            Status_Message.Set ("Prunt is disabled. Enable in config editor after setting other settings.");
+         else
             begin
                for S in Stepper_Name loop
                   declare
@@ -240,30 +133,155 @@ package body Prunt_Glue.Glue is
                   begin
                      My_Config.Config_File.Read (Stepper_Params, S);
 
-                     Params (S) :=
-                       (Direction_Setup_Time => Time_To_Low_Level (Stepper_Params.Direction_Setup_Time),
-                        Step_Time            => Time_To_Low_Level (Stepper_Params.Step_Time),
-                        User_Data            => (Current_Step_State => Low_State));
+                     if Stepper_Params.Enabled then
+                        Set_Stepper_Pin_State (S, Step_Pin, Low_State);
+                        if Stepper_Params.Enabled_On_High then
+                           Set_Stepper_Pin_State (S, Enable_Pin, High_State);
+                        else
+                           Set_Stepper_Pin_State (S, Enable_Pin, Low_State);
+                        end if;
+                     end if;
                   end;
                end loop;
 
-               My_Stepgen.Runner.Setup (Params);
-            end;
-
-            My_Gcode_Handler.Runner.Start;
-
-         exception
-            when E : Config_Constraint_Error =>
-               Status_Message.Set (Ada.Exceptions.Exception_Information (E));
                declare
-                  Prunt_Params : My_Config.Prunt_Parameters;
+                  Kinematics_Params : My_Config.Kinematics_Parameters;
                begin
-                  My_Config.Config_File.Read (Prunt_Params);
-                  Prunt_Params.Enabled := False;
-                  My_Config.Config_File.Write (Prunt_Params);
+                  My_Config.Config_File.Read (Kinematics_Params);
+                  Ada.Task_Termination.Set_Specific_Handler
+                    (My_Planner.Runner'Identity, My_GUI.Fatal_Exception_Occurrence_Holder.all.Set'Access);
+                  My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
                end;
-         end;
-      end if;
+
+               declare
+                  Data             : Stepper_Pos_Data := [others => [others => Physical_Types.Length'Last]];
+                  Kinematic_Params : My_Config.Kinematics_Parameters;
+
+                  Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
+
+                  procedure Check_Stepper (S : Stepper_Name) is
+                     Stepper_Params : My_Config.Stepper_Parameters;
+                  begin
+                     My_Config.Config_File.Read (Stepper_Params, S);
+
+                     if not Stepper_Params.Enabled then
+                        raise Config_Constraint_Error
+                          with "Stepper " & S'Image & " attached to an axis but not enabled.";
+                     end if;
+
+                     if Used_Steppers (S) then
+                        raise Config_Constraint_Error with "Stepper " & S'Image & " attached to multiples axes.";
+                     end if;
+
+                     Used_Steppers (S) := True;
+                  end Check_Stepper;
+               begin
+                  My_Config.Config_File.Read (Kinematic_Params);
+
+                  for S in Stepper_Name loop
+                     declare
+                        Stepper_Params : My_Config.Stepper_Parameters;
+                     begin
+                        My_Config.Config_File.Read (Stepper_Params, S);
+
+                        case Kinematic_Params.Kind is
+                           when My_Config.Cartesian_Kind =>
+                              if Kinematic_Params.X_Steppers (S) then
+                                 Check_Stepper (S);
+                                 Data (X_Axis, S) :=
+                                   Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                              end if;
+
+                              if Kinematic_Params.Y_Steppers (S) then
+                                 Check_Stepper (S);
+                                 Data (Y_Axis, S) :=
+                                   Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                              end if;
+                           when My_Config.Core_XY_Kind =>
+                              if Kinematic_Params.A_Steppers (S) then
+                                 Check_Stepper (S);
+                                 Data (X_Axis, S) :=
+                                   0.5 * Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                                 Data (Y_Axis, S) :=
+                                   0.5 * Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                              end if;
+
+                              if Kinematic_Params.B_Steppers (S) then
+                                 Check_Stepper (S);
+                                 Data (X_Axis, S) :=
+                                   0.5 * Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                                 Data (Y_Axis, S) :=
+                                   -0.5 * Stepper_Params.Mm_Per_Step *
+                                   (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                              end if;
+                        end case;
+
+                        if Kinematic_Params.Z_Steppers (S) then
+                           Check_Stepper (S);
+                           Data (Z_Axis, S) :=
+                             Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                        end if;
+
+                        if Kinematic_Params.E_Steppers (S) then
+                           Check_Stepper (S);
+                           Data (E_Axis, S) :=
+                             Stepper_Params.Mm_Per_Step * (if Stepper_Params.Invert_Direction then -1.0 else 1.0);
+                        end if;
+                     end;
+                  end loop;
+
+                  Ada.Task_Termination.Set_Specific_Handler
+                    (My_Stepgen.Preprocessor'Identity, My_GUI.Fatal_Exception_Occurrence_Holder.all.Set'Access);
+                  My_Stepgen.Preprocessor.Setup (Data);
+               end;
+
+               declare
+                  Params : My_Stepgen.Stepper_Parameters_Array;
+               begin
+                  for S in Stepper_Name loop
+                     declare
+                        Stepper_Params : My_Config.Stepper_Parameters;
+                     begin
+                        My_Config.Config_File.Read (Stepper_Params, S);
+
+                        Params (S) :=
+                          (Direction_Setup_Time => Time_To_Low_Level (Stepper_Params.Direction_Setup_Time),
+                           Step_Time            => Time_To_Low_Level (Stepper_Params.Step_Time),
+                           User_Data            => (Current_Step_State => Low_State));
+                     end;
+                  end loop;
+
+                  Ada.Task_Termination.Set_Specific_Handler
+                    (My_Stepgen.Runner'Identity, My_GUI.Fatal_Exception_Occurrence_Holder.all.Set'Access);
+                  My_Stepgen.Runner.Setup (Params);
+               end;
+
+               Ada.Task_Termination.Set_Specific_Handler
+                 (My_Gcode_Handler.Runner'Identity, My_GUI.Fatal_Exception_Occurrence_Holder.all.Set'Access);
+               My_Gcode_Handler.Runner.Start;
+
+            exception
+               when E : Config_Constraint_Error =>
+                  declare
+                     Prunt_Params : My_Config.Prunt_Parameters;
+                  begin
+                     My_Config.Config_File.Read (Prunt_Params);
+                     Prunt_Params.Enabled := False;
+                     My_Config.Config_File.Write (Prunt_Params);
+                  end;
+                  raise;
+            end;
+         end if;
+      exception
+         when E : others =>
+            My_GUI.Fatal_Exception_Occurrence_Holder.all.Set
+              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+      end;
 
       My_GUI.Run;
    end Run;

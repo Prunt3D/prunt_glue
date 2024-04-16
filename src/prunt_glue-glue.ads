@@ -75,6 +75,12 @@ generic
    --  while avoiding the point queue running dry. In a future version the fullness of the of the queue will be
    --  presented in the GUI to make tuning this value easier.
 
+   --  with procedure Force_Heaters_Off;
+   --  If this procedure is called then the heaters should be forced off using a method that is separate from the PWM
+   --  outputs. This is used if any of the heater control loops appear to be unresponsive or if any heater control loop
+   --  detects that the temperature is not responding to PWM changes. The heaters should stay off until the program
+   --  terminates.
+
    --  TODO: Replace the following parameters with a single Target_Memory_Usage parameter.
 
    Max_Planner_Block_Corners : Motion_Planner.Max_Corners_Type := 3_000;
@@ -98,6 +104,16 @@ generic
 package Prunt_Glue.Glue is
 
    procedure Run;
+
+   --  procedure Report_External_Error (Message : String);
+   --  Report an error to Prunt and cause it to halt the printer.
+
+   --  procedure Check_Prunt_Is_Working;
+   --  If any part of Prunt is unresponsive, then this procedure will attempt to halt the rest of Prunt. This procedure
+   --  should be called as part of a watchdog procedure that will shut down the heaters so that if any part of Prunt is
+   --  holding a lock or similar then this procedure will never return and the watchdog will time out. The watchdog
+   --  period should be short enough that heaters can not reach dangerous temperatures. The watchdog timer itself
+   --  should ideally be running on external hardware such as a microcontroller.
 
 private
 
