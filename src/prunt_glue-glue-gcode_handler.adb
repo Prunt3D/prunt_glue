@@ -360,10 +360,6 @@ package body Prunt_Glue.Glue.Gcode_Handler is
             Gcode_Queue.Clear_File;
          end if;
       end loop;
-   exception
-      when E : others =>
-         Put_Line ("Error in Prunt_Glue.Gcode_Handler: ");
-         Put_Line (Ada.Exceptions.Exception_Information (E));
    end Runner;
 
    protected body Gcode_Queue is
