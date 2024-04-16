@@ -28,6 +28,7 @@ package body Prunt_Glue.Glue.Gcode_Handler is
    procedure Set_Status_Message (S : String) is
    begin
       null;
+      Ada.Text_IO.Put_Line (S);
       --  TODO
    end Set_Status_Message;
 
@@ -57,77 +58,61 @@ package body Prunt_Glue.Glue.Gcode_Handler is
 
       Command_Constraint_Error : exception;
 
-      procedure Check_Bounds (Pos : Position) is
-      begin
-         for I in Axis_Name loop
-            if Pos (I) < Kinematics_Params.Lower_Pos_Limit (I) or Pos (I) > Kinematics_Params.Upper_Pos_Limit (I)
-            then
-               raise Command_Constraint_Error
-                 with "Position is out of bounds (" & I'Image & " = " & Pos (I)'Image & "):";
-            end if;
-         end loop;
-      end Check_Bounds;
-
-      procedure Enforce_Feedrate_Limits (Offset : Position_Offset; Feedrate : in out Velocity) is
-         Has_XYZ : Boolean := [Offset with delta E_Axis => 0.0 * mm] /= Zero_Pos_Offset;
-      begin
-         if Kinematics_Params.Ignore_E_Feedrate_In_XYZE_Moves and Has_XYZ then
-            Feedrate := Feedrate * abs Offset / abs [Offset with delta E_Axis => 0.0 * mm];
-         end if;
-
-         if Feedrate > Kinematics_Params.Max_Feedrate then
-            Feedrate := Kinematics_Params.Max_Feedrate;
-         end if;
-
-         for I in Axis_Name loop
-            if abs Offset (I) > 0.0 * mm then
-               Feedrate :=
-                 Velocity'Min (Feedrate, Kinematics_Params.Max_Axial_Velocities (I) * abs Offset / abs Offset (I));
-            end if;
-         end loop;
-      end Enforce_Feedrate_Limits;
-
       procedure Double_Tap_Home_Axis (Axis : Axis_Name; Pos_After : in out Position) is
-         Switch          : Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
-         Hit_State       : Pin_State         :=
+         Switch       : Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
+         Hit_State    : Pin_State         :=
            (if Switchwise_Switch_Params (Axial_Homing_Params (Axis).Switch).Hit_On_High then High_State
             else Low_State);
-         First_Offset : Position_Offset :=
+         First_Offset : Position_Offset   :=
            [Zero_Pos_Offset with delta Axis => Axial_Homing_Params (Axis).First_Move_Distance];
-         Second_Offset : Position_Offset :=
+         Second_Offset : Position_Offset  :=
            [Zero_Pos_Offset with delta Axis => Axial_Homing_Params (Axis).Second_Move_Distance];
-         First_Feedrate  : Velocity          := Kinematics_Params.Max_Feedrate;
-         Second_Feedrate : Velocity          := Kinematics_Params.Max_Feedrate;
+         Back_Off_Offset : Position_Offset  :=
+           [Zero_Pos_Offset with delta Axis => Axial_Homing_Params (Axis).Back_Off_Move_Distance];
       begin
-         Enforce_Feedrate_Limits (First_Offset, First_Feedrate);
-         Enforce_Feedrate_Limits (Second_Offset, Second_Feedrate);
-
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Zero_Pos));
+             Reset_Pos        => Zero_Pos),
+            Ignore_Bounds => True);
 
          if Get_Input_Switch_State (Switch) = Hit_State then
             My_Planner.Enqueue
-              ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos - First_Offset, Feedrate => First_Feedrate));
+              ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + Back_Off_Offset, Feedrate => Velocity'Last),
+               Ignore_Bounds => True);
             My_Planner.Enqueue
               ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
                 Flush_Extra_Data => (others => <>),
-                Reset_Pos        => Zero_Pos));
+                Reset_Pos        => Zero_Pos),
+               Ignore_Bounds => True);
+         end if;
+
+         --  TODO: This is not a good solution. We should instead tag the back-off move so it goes in to the finished
+         --  block queue, then we can wait for that here instead of using a delay.
+         delay 1.0;
+         My_Stepgen.Wait_Until_Idle;
+         delay 1.0;
+
+         if Get_Input_Switch_State (Switch) = Hit_State then
+            raise Command_Constraint_Error with "Homing switch still hit after backing off before first hit.";
          end if;
 
          My_Planner.Enqueue
-           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + First_Offset, Feedrate => First_Feedrate));
+           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + First_Offset, Feedrate => Velocity'Last),
+            Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (Is_Homing_Move => True, Home_Switch => Switch, Hit_On_State => Hit_State),
-             Reset_Pos        => Zero_Pos));
+             Reset_Pos        => Zero_Pos),
+            Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos - First_Offset - First_Offset, Feedrate => First_Feedrate));
+           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + Back_Off_Offset, Feedrate => Velocity'Last),
+            Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Zero_Pos));
+             Reset_Pos        => Zero_Pos),
+            Ignore_Bounds => True);
 
          declare
             Data             : Flush_Extra_Data;
@@ -143,17 +128,20 @@ package body Prunt_Glue.Glue.Gcode_Handler is
          --  block queue, then we can wait for that here instead of using a delay.
          delay 1.0;
          My_Stepgen.Wait_Until_Idle;
+         delay 1.0;
 
          if Get_Input_Switch_State (Switch) = Hit_State then
             raise Command_Constraint_Error with "Homing switch still hit after backing off after first hit.";
          end if;
 
          My_Planner.Enqueue
-           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + Second_Offset, Feedrate => Second_Feedrate));
+           ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos + Second_Offset, Feedrate => Velocity'Last),
+            Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (Is_Homing_Move => True, Home_Switch => Switch, Hit_On_State => Hit_State),
-             Reset_Pos        => Zero_Pos));
+             Reset_Pos        => Zero_Pos),
+            Ignore_Bounds => True);
 
          declare
             Data             : Flush_Extra_Data;
@@ -179,25 +167,27 @@ package body Prunt_Glue.Glue.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Pos_After));
+             Reset_Pos        => Pos_After),
+            Ignore_Bounds => True);
 
          declare
             Pos_Before_Final_Move : Position := Pos_After;
-            Final_Feedrate        : Velocity := Kinematics_Params.Max_Feedrate;
          begin
-            if Pos_After (Axis) < Kinematics_Params.Lower_Pos_Limit (Axis) then
-               Pos_After (Axis) := Kinematics_Params.Lower_Pos_Limit (Axis);
-            elsif Pos_After (Axis) > Kinematics_Params.Upper_Pos_Limit (Axis) then
-               Pos_After (Axis) := Kinematics_Params.Upper_Pos_Limit (Axis);
+            Pos_After := Pos_After + Back_Off_Offset;
+
+            if Pos_After (Axis) < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis) then
+               Pos_After (Axis) := Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis);
+            elsif Pos_After (Axis) > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis) then
+               Pos_After (Axis) := Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis);
             end if;
 
-            Enforce_Feedrate_Limits (Pos_Before_Final_Move - Pos_After, Final_Feedrate);
-
-            My_Planner.Enqueue ((Kind => My_Planner.Move_Kind, Pos => Pos_After, Feedrate => Final_Feedrate));
+            My_Planner.Enqueue
+              ((Kind => My_Planner.Move_Kind, Pos => Pos_After, Feedrate => Velocity'Last), Ignore_Bounds => True);
             My_Planner.Enqueue
               ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
                 Flush_Extra_Data => (others => <>),
-                Reset_Pos        => Pos_After));
+                Reset_Pos        => Pos_After),
+               Ignore_Bounds => True);
             Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
          end;
       end Double_Tap_Home_Axis;
@@ -208,8 +198,6 @@ package body Prunt_Glue.Glue.Gcode_Handler is
             when None_Kind =>
                null;
             when Move_Kind =>
-               Check_Bounds (Command.Pos);
-
                for I in Axis_Name loop
                   if not Is_Homed (I) then
                      raise Command_Constraint_Error
@@ -220,17 +208,14 @@ package body Prunt_Glue.Glue.Gcode_Handler is
                declare
                   Feedrate : Velocity := Command.Feedrate;
                begin
-                  Enforce_Feedrate_Limits (Command.Old_Pos - Command.Pos, Feedrate);
                   My_Planner.Enqueue ((Kind => My_Planner.Move_Kind, Pos => Command.Pos, Feedrate => Feedrate));
                end;
             when Reset_Position_Kind =>
-               Check_Bounds (Command.New_Pos);
-
                My_Planner.Enqueue
                  ((Kind            => My_Planner.Flush_And_Reset_Position_Kind,
                    Reset_Pos       => Command.New_Pos,
                   Flush_Extra_Data => (others => <>)));
-                  Gcode_Parser.Reset_Position (Parser_Context, Command.New_Pos);
+               Gcode_Parser.Reset_Position (Parser_Context, Command.New_Pos);
             when Home_Kind =>
                declare
                   Pos_After    : Position                       := Command.Pos_Before;
@@ -248,6 +233,14 @@ package body Prunt_Glue.Glue.Gcode_Handler is
                               Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
                            when My_Config.Double_Tap_Kind =>
                               Double_Tap_Home_Axis (Axis, Pos_After);
+                              if Axis = Z_Axis then
+                                 Pos_After (Z_Axis) := 5.0 * mm;
+                                 My_Planner.Enqueue
+                                   ((Kind => My_Planner.Move_Kind, Pos => Pos_After, Feedrate => 10.0 * mm / s));
+                                 My_Planner.Enqueue
+                                   ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+                                 Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+                              end if;
                         end case;
                         Is_Homed (Axis) := True;
                      end if;
@@ -272,21 +265,26 @@ package body Prunt_Glue.Glue.Gcode_Handler is
             case Axial_Homing_Params (I).Kind is
                when My_Config.Double_Tap_Kind =>
                   if Axial_Homing_Params (I).First_Move_Distance = 0.0 * mm or
-                    Axial_Homing_Params (I).Second_Move_Distance = 0.0 * mm
+                    Axial_Homing_Params (I).Second_Move_Distance = 0.0 * mm or
+                    Axial_Homing_Params (I).Back_Off_Move_Distance = 0.0 * mm
                   then
                      null;
                      --  TODO: Handle this.
                   end if;
 
-                  if Axial_Homing_Params (I).First_Move_Distance / Axial_Homing_Params (I).Second_Move_Distance <
-                    0.0
+                  if Axial_Homing_Params (I).First_Move_Distance / Axial_Homing_Params (I).Second_Move_Distance < 0.0
                   then
                      null;
                      --  TODO: Handle this.
                   end if;
 
-                  if abs Axial_Homing_Params (I).First_Move_Distance <
-                    abs Axial_Homing_Params (I).Second_Move_Distance
+                  if Axial_Homing_Params (I).First_Move_Distance / Axial_Homing_Params (I).Back_Off_Move_Distance > 0.0
+                  then
+                     null;
+                     --  TODO: Handle this.
+                  end if;
+
+                  if abs Axial_Homing_Params (I).First_Move_Distance < abs Axial_Homing_Params (I).Second_Move_Distance
                   then
                      null;
                      --  TODO: Handle this (larger distance for second move is nonsensical as accuracy will be lower).

@@ -146,8 +146,7 @@ package body Prunt_Glue.Glue is
                Kinematics_Params : My_Config.Kinematics_Parameters;
             begin
                My_Config.Config_File.Read (Kinematics_Params);
-               My_Planner.Runner.Setup
-                 (In_Scaler => Kinematics_Params.Planning_Scaler, In_Limits => Kinematics_Params.Max_Limits);
+               My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
             end;
 
             declare
